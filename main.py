@@ -6,6 +6,14 @@ import neo4j
 import math
 
 
+def is_float(value):
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
 def get_compass_direction(*, vector):
     numerator = vector[1][1] - vector[0][1]
     denominator = vector[1][0] - vector[0][0]
@@ -52,7 +60,7 @@ def get_choice(*, msg="Please enter choice: ", choice_data):
         try:
             choice = int(input(f"{msg}"))
             if max_len >= choice > 0:
-                print(f"You choose {choice} is '{choice_data[choice - 1]}'\n")
+                print(f"You choose {choice} is '{choice_data[choice - 1]}'")
                 return choice_data[choice - 1]
             else:
                 raise ValueError("Invalid input")
@@ -131,11 +139,6 @@ def create_constraint(*, driver):
     if retval == EXIT_FAILURE:
         return EXIT_FAILURE
 
-    create_constraint_cypher2 = "CREATE CONSTRAINT relation_are_unique IF NOT EXISTS FOR ()-[r:CONNECTS_TO]-() REQUIRE (r.name) IS UNIQUE;"
-    retval = query_void(driver=driver, the_cypher=create_constraint_cypher2)
-    if retval == EXIT_FAILURE:
-        return EXIT_FAILURE
-
     return EXIT_SUCCESS
 
 
@@ -157,6 +160,12 @@ def create_index(*, driver):
 
 
 def bulk_insert(*, driver):
+
+    delete_all = "MATCH (N) DETACH DELETE N"
+    retval = query_void(driver=driver, the_cypher=delete_all)
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
     with open("bangsean_data.txt", "r") as f:
         data = f.read()
         retval = query_void(driver=driver, the_cypher=data)
@@ -202,10 +211,118 @@ def select_place(*, driver, title="Select place"):
                 return selected_node
 
 
+def node_name_input():
+    while True:
+        node_name = input("Enter Node name: ")
+        if node_name == "":
+            print("Node name cannot be empty.")
+            continue
+        break
+    return node_name
+
+
+def node_latitude_input():
+    while True:
+        node_latitude = input("Enter Node latitude: ")
+        if node_latitude == "":
+            print("Node latitude cannot be empty.")
+            continue
+        if node_latitude[0] == "-":
+            if not is_float(node_latitude[1:]):
+                print("Node latitude must be a number.")
+                continue
+        else:
+            if not is_float(node_latitude):
+                print("Node latitude must be a number.")
+                continue
+        break
+    return node_latitude
+
+
+def node_longitude_input():
+    while True:
+        node_longitude = input("Enter Node longitude: ")
+        if node_longitude == "":
+            print("Node longitude cannot be empty.")
+            continue
+        if node_longitude[0] == "-":
+            if not is_float(node_longitude[1:]):
+                print("Node longitude must be a number.")
+                continue
+        else:
+            if not is_float(node_longitude.isdigit()):
+                print("Node longitude must be a number.")
+                continue
+        break
+    return node_longitude
+
+
+def node_light_input():
+    while True:
+        node_light = input("Enter Node light (Yes/No): ")
+        if node_light == "":
+            print("Node light cannot be empty.")
+            continue
+        if node_light not in ["Yes", "No", "yes", "no", "y", "n"]:
+            print("Node light must be 'Yes' or 'No'.")
+            continue
+        if node_light == "Yes" or node_light == "yes" or node_light == "y":
+            node_light = True
+        else:
+            node_light = False
+        break
+    return node_light
+
+
+def road_name_input():
+    while True:
+        road_name = input("Enter Road name: ")
+        if road_name == "":
+            print("Road name cannot be empty.")
+            continue
+        break
+    return road_name
+
+
+def road_distance_input():
+    while True:
+        road_distance = input("Enter Road distance: ")
+        if road_distance == "":
+            print("Road distance cannot be empty.")
+            continue
+        elif not road_distance.isdigit():
+            print("Road distance must be a number.")
+            continue
+        break
+    return road_distance
+
+
 def add_road(*, driver):
+
     print("Add new road")
+    node_name = node_name_input()
+    node_latitude = node_latitude_input()
+    node_longitude = node_longitude_input()
+    node_light = node_light_input()
 
     start_node = select_place(title="Select start node", driver=driver)
+    road_name_from_start = road_name_input()
+    road_distance_from_start = road_distance_input()
+    create_node_with_start_node = CREATE_NODE_WITH_RELATION.format(
+        start_node,
+        node_name,
+        node_latitude,
+        node_longitude,
+        node_light,
+        road_name_from_start,
+        road_distance_from_start,
+        road_name_from_start,
+        road_distance_from_start,
+    )
+    retval = query_void(driver=driver, the_cypher=create_node_with_start_node)
+    if retval == EXIT_FAILURE:
+        print("Failed to create node with start node.")
+        return EXIT_FAILURE
 
     while True:
         have_end_node = input("Do you have end node? (Yes/No): ")
@@ -223,124 +340,12 @@ def add_road(*, driver):
 
     if have_end_node:
         end_node = select_place(title="Select end node", driver=driver)
-
-    if have_end_node:
         if start_node == end_node:
             print("Start place and end place must be different.")
             return EXIT_FAILURE
-
-    print("Road information")
-    print("start:", start_node)
-    if have_end_node:
-        print("end:", end_node)
-    while True:
-        node_name = input("Enter Node name: ")
-        if node_name == "":
-            print("Node name cannot be empty.")
-            continue
-        break
-
-    while True:
-        node_latitude = input("Enter Node latitude: ")
-        if node_latitude == "":
-            print("Node latitude cannot be empty.")
-            continue
-        if node_latitude[0] == "-":
-            if not node_latitude[1:].isdigit():
-                print("Node latitude must be a number.")
-                continue
-        else:
-            if not node_latitude.isdigit():
-                print("Node latitude must be a number.")
-                continue
-        break
-
-    while True:
-        node_longitude = input("Enter Node longitude: ")
-        if node_longitude == "":
-            print("Node longitude cannot be empty.")
-            continue
-        if node_longitude[0] == "-":
-            if not node_longitude[1:].isdigit():
-                print("Node longitude must be a number.")
-                continue
-        else:
-            if not node_longitude.isdigit():
-                print("Node longitude must be a number.")
-                continue
-        break
-
-    while True:
-        node_light = input("Enter node light (Yes/No): ")
-        if node_light == "":
-            print("node light cannot be empty.")
-            continue
-        if node_light not in ["Yes", "No", "yes", "no", "y", "n"]:
-            print("node light must be 'Yes' or 'No'.")
-            continue
-        if node_light == "Yes" or node_light == "yes" or node_light == "y":
-            node_light = True
-        else:
-            node_light = False
-        break
-
-    while True:
-        road_name_from_start = input("Enter road name from start: ")
-        if road_name_from_start == "":
-            print("Road name from start cannot be empty.")
-            continue
-        break
-
-    while True:
-        road_distance_from_start = input("Enter road distance from start: ")
-        if road_distance_from_start == "":
-            print("Road distance from start cannot be empty.")
-            continue
-        elif not road_distance_from_start.isdigit():
-            print("Road distance from start must be a number.")
-            continue
-        break
-
-    create_node_with_relation_template = (
-        "MATCH (n:Place) WHERE n.name = '{}'"
-        "MERGE (m:Place {{name: '{}', latitude: {}, longitude: {}, light: {}}})"
-        "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m)"
-    )
-
-    create_node_with_start_node = create_node_with_relation_template.format(
-        start_node,
-        node_name,
-        node_latitude,
-        node_longitude,
-        node_light,
-        road_name_from_start,
-        road_distance_from_start,
-    )
-
-    retval = query_void(driver=driver, the_cypher=create_node_with_start_node)
-    if retval == EXIT_FAILURE:
-        print("Failed to create node with start node.")
-        return EXIT_FAILURE
-
-    if have_end_node:
-        while True:
-            road_name_from_end = input("Enter road name from end: ")
-            if road_name_from_end == "":
-                print("Road name from end cannot be empty.")
-                continue
-            break
-
-        while True:
-            road_distance_from_end = input("Enter road distance from end: ")
-            if road_distance_from_end == "":
-                print("Road distance from end cannot be empty.")
-                continue
-            elif not road_distance_from_end.isdigit():
-                print("Road distance from end must be a number.")
-                continue
-            break
-
-        create_node_with_end_node = create_node_with_relation_template.format(
+        road_name_from_end = road_name_input()
+        road_distance_from_end = road_distance_input()
+        create_node_with_end_node = CREATE_NODE_WITH_RELATION.format(
             end_node,
             node_name,
             node_latitude,
@@ -348,12 +353,149 @@ def add_road(*, driver):
             node_light,
             road_name_from_end,
             road_distance_from_end,
+            road_name_from_end,
+            road_distance_from_end,
         )
-
         retval = query_void(driver=driver, the_cypher=create_node_with_end_node)
         if retval == EXIT_FAILURE:
             print("Failed to create node with end node.")
             return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def add_intersect(*, driver):
+    print("Add new intersect")
+    node_name = node_name_input()
+    node_latitude = node_latitude_input()
+    node_longitude = node_longitude_input()
+    node_light = node_light_input()
+
+    start_node = select_place(title="Select start node", driver=driver)
+    road_name_from_start = road_name_input()
+    road_distance_from_start = road_distance_input()
+
+    end_node = select_place(title="Select end node", driver=driver)
+    if start_node == end_node:
+        print("Start place and end place must be different.")
+        return EXIT_FAILURE
+    road_name_from_end = road_name_input()
+    road_distance_from_end = road_distance_input()
+
+    delete_old_relation = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) DELETE r"
+    retval = query_void(
+        driver=driver, the_cypher=delete_old_relation.format(start_node, end_node)
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to delete old relation.")
+        return EXIT_FAILURE
+
+    create_node_with_start_node = CREATE_NODE_WITH_RELATION.format(
+        start_node,
+        node_name,
+        node_latitude,
+        node_longitude,
+        node_light,
+        road_name_from_start,
+        road_distance_from_start,
+        road_name_from_start,
+        road_distance_from_start,
+    )
+    retval = query_void(driver=driver, the_cypher=create_node_with_start_node)
+    if retval == EXIT_FAILURE:
+        print("Failed to create node with start node.")
+        return EXIT_FAILURE
+
+    create_node_with_end_node = CREATE_NODE_WITH_RELATION.format(
+        end_node,
+        node_name,
+        node_latitude,
+        node_longitude,
+        node_light,
+        road_name_from_end,
+        road_distance_from_end,
+        road_name_from_end,
+        road_distance_from_end,
+    )
+    retval = query_void(driver=driver, the_cypher=create_node_with_end_node)
+    if retval == EXIT_FAILURE:
+        print("Failed to create node with end node.")
+        return EXIT_FAILURE
+
+    return EXIT_SUCCESS
+
+
+def delete_node(*, driver):
+    selected_node = select_place(title="Select node to delete", driver=driver)
+
+    check_node = (
+        "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place) RETURN DISTINCT m"
+    )
+
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=check_node.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    related_nodes = [i.data()["m"]["name"] for i in records]
+
+    distance_dict = {}
+    distance_cypher = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) RETURN r.distance"
+    for node in related_nodes:
+        retval, records, summary, keys = query(
+            driver=driver, the_cypher=distance_cypher.format(selected_node, node)
+        )
+        if retval == EXIT_FAILURE:
+            return EXIT_FAILURE
+        distance_dict[node] = records[0].data()["r.distance"]
+
+    pair_related_nodes = []
+    for i in range(len(related_nodes)):
+        for j in range(i + 1, len(related_nodes)):
+            pair_related_nodes.append((related_nodes[i], related_nodes[j]))
+
+    for pair in pair_related_nodes:
+        start_node = pair[0]
+        end_node = pair[1]
+        total_distance = distance_dict[start_node] + distance_dict[end_node]
+
+        delete_relation = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) DELETE r"
+        retval = query_void(
+            driver=driver, the_cypher=delete_relation.format(start_node, end_node)
+        )
+        if retval == EXIT_FAILURE:
+            print("Failed to delete relation.")
+            return EXIT_FAILURE
+
+        create_relation = (
+            "MATCH (n:Place) WHERE n.name = '{}' "
+            "MATCH (m:Place) WHERE m.name = '{}' "
+            "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m),"
+            "(m)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(n)"
+        )
+
+        retval = query_void(
+            driver=driver,
+            the_cypher=create_relation.format(
+                start_node,
+                end_node,
+                f"{start_node} to {end_node}",
+                total_distance,
+                f"{start_node} to {end_node}",
+                total_distance,
+            ),
+        )
+        if retval == EXIT_FAILURE:
+            print("Failed to create relation.")
+            return EXIT_FAILURE
+
+    delete_node_cypher = "MATCH (n:Place {{name: '{}'}}) DETACH DELETE n"
+    retval = query_void(
+        driver=driver, the_cypher=delete_node_cypher.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to delete node.")
+        return EXIT_FAILURE
 
     return EXIT_SUCCESS
 
@@ -383,18 +525,31 @@ def main():
                 choice = get_choice(
                     choice_data=[
                         "Show all places",
-                        "Add new road",
-                        "Add new intersect",
+                        "Add Node (Road)",
+                        "Add Node (Intersect)",
+                        "Delete Node",
                         "Exit",
                     ]
                 )
                 match choice:
                     case "Show all places":
                         select_place(driver=driver)
-                    case "Add new road":
-                        add_road(driver=driver)
-                    case "Add new intersect":
-                        pass
+                    case "Add Node (Road)":
+                        retval = add_road(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to add road.")
+                            return EXIT_FAILURE
+                    case "Add Node (Intersect)":
+                        retval = add_intersect(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to add intersect.")
+                            return EXIT_FAILURE
+
+                    case "Delete Node":
+                        retval = delete_node(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to delete node.")
+                            return EXIT_FAILURE
                     case "Exit":
                         return EXIT_SUCCESS
 
@@ -405,6 +560,13 @@ def main():
         print("User Exit Ctrl-C")
         return EXIT_SUCCESS
 
+
+CREATE_NODE_WITH_RELATION = (
+    "MATCH (n:Place) WHERE n.name = '{}'"
+    "MERGE (m:Place {{name: '{}', latitude: {}, longitude: {}, light: {}}})"
+    "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m),"
+    "(m)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(n)"
+)
 
 DIRECTIONS = [
     "East",
