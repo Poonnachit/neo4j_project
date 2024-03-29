@@ -1,0 +1,8 @@
+CREATE (a:Place {name: 'a', lat: 1, lon: 1}),
+       (b:Place {name: 'b', lat: 2, lon: 2}),
+       (c:Place {name: 'c', lat: 3, lon: 3}),
+       (d:Place {name: 'd', lat: 4, lon: 4}),
+       (a) -[:CONNECTED_TO {distance: 1}]-> (b),
+       (b) -[:CONNECTED_TO {distance: 2}]-> (c),
+       (c) -[:CONNECTED_TO {distance: 3}]-> (d),
+       (d) -[:CONNECTED_TO {distance: 4}]-> (a);
