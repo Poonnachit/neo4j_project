@@ -134,7 +134,10 @@ def query(*, driver, the_cypher):
 
 
 def create_constraint(*, driver):
-    create_constraint_cypher = "CREATE CONSTRAINT nodes_are_unique IF NOT EXISTS FOR (p:Place) REQUIRE (p.name) IS UNIQUE;"
+    create_constraint_cypher = (
+        "CREATE CONSTRAINT nodes_are_unique IF NOT EXISTS "
+        "FOR (p:Place) REQUIRE (p.name) IS UNIQUE;"
+    )
     retval = query_void(driver=driver, the_cypher=create_constraint_cypher)
     if retval == EXIT_FAILURE:
         return EXIT_FAILURE
@@ -459,35 +462,35 @@ def delete_node(*, driver):
         end_node = pair[1]
         total_distance = distance_dict[start_node] + distance_dict[end_node]
 
-        delete_relation = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) DELETE r"
-        retval = query_void(
-            driver=driver, the_cypher=delete_relation.format(start_node, end_node)
+        check_exist_relation = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) RETURN count(r)"
+        retval, records, summary, keys = query(
+            driver=driver, the_cypher=check_exist_relation.format(start_node, end_node)
         )
         if retval == EXIT_FAILURE:
-            print("Failed to delete relation.")
             return EXIT_FAILURE
 
-        create_relation = (
-            "MATCH (n:Place) WHERE n.name = '{}' "
-            "MATCH (m:Place) WHERE m.name = '{}' "
-            "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m),"
-            "(m)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(n)"
-        )
+        if records[0].data()["count(r)"] == 0:
+            create_relation = (
+                "MATCH (n:Place) WHERE n.name = '{}' "
+                "MATCH (m:Place) WHERE m.name = '{}' "
+                "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m),"
+                "(m)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(n)"
+            )
 
-        retval = query_void(
-            driver=driver,
-            the_cypher=create_relation.format(
-                start_node,
-                end_node,
-                f"{start_node} to {end_node}",
-                total_distance,
-                f"{start_node} to {end_node}",
-                total_distance,
-            ),
-        )
-        if retval == EXIT_FAILURE:
-            print("Failed to create relation.")
-            return EXIT_FAILURE
+            retval = query_void(
+                driver=driver,
+                the_cypher=create_relation.format(
+                    start_node,
+                    end_node,
+                    f"{start_node} to {end_node}",
+                    total_distance,
+                    f"{start_node} to {end_node}",
+                    total_distance,
+                ),
+            )
+            if retval == EXIT_FAILURE:
+                print("Failed to create relation.")
+                return EXIT_FAILURE
 
     delete_node_cypher = "MATCH (n:Place {{name: '{}'}}) DETACH DELETE n"
     retval = query_void(
@@ -497,6 +500,219 @@ def delete_node(*, driver):
         print("Failed to delete node.")
         return EXIT_FAILURE
 
+    return EXIT_SUCCESS
+
+
+def edit_node_name(*, driver, selected_node):
+    edit_node_name_cypher = "MATCH (n:Place {{name: '{}'}}) SET n.name = '{}'"
+    node_name = node_name_input()
+    retval = query_void(
+        driver=driver, the_cypher=edit_node_name_cypher.format(selected_node, node_name)
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit node name.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_node_latitude(*, driver, selected_node):
+    edit_node_latitude_cypher = "MATCH (n:Place {{name: '{}'}}) SET n.latitude = {}"
+    node_latitude = node_latitude_input()
+    retval = query_void(
+        driver=driver,
+        the_cypher=edit_node_latitude_cypher.format(selected_node, node_latitude),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit node latitude.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_node_longitude(*, driver, selected_node):
+    edit_node_longitude_cypher = "MATCH (n:Place {{name: '{}'}}) SET n.longitude = {}"
+    node_longitude = node_longitude_input()
+    retval = query_void(
+        driver=driver,
+        the_cypher=edit_node_longitude_cypher.format(selected_node, node_longitude),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit node longitude.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_node_light(*, driver, selected_node):
+    edit_node_light_cypher = "MATCH (n:Place {{name: '{}'}}) SET n.light = {}"
+    node_light = node_light_input()
+    retval = query_void(
+        driver=driver,
+        the_cypher=edit_node_light_cypher.format(selected_node, node_light),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit node light.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def print_node_properties(*, driver, selected_node):
+    get_node_properties = "MATCH (n:Place {{name: '{}'}}) RETURN n"
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=get_node_properties.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    node = records[0].data()["n"]
+    print("Current properties")
+    print(f"Name     : {node['name']}")
+    print(f"Latitude : {node['latitude']}")
+    print(f"Longitude: {node['longitude']}")
+    print(f"Light    : {node['light']}")
+    print("-" * 79)
+    return EXIT_SUCCESS
+
+
+def edit_node_properties(*, driver, selected_node):
+    retval = print_node_properties(driver=driver, selected_node=selected_node)
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    selected_property = get_choice(
+        msg="Please enter property to edit: ",
+        choice_data=["Name", "Latitude", "Longitude", "Light"],
+    )
+    match selected_property:
+        case "Name":
+            retval = edit_node_name(driver=driver, selected_node=selected_node)
+            if retval == EXIT_FAILURE:
+                print("Failed to edit name.")
+                return EXIT_FAILURE
+        case "Latitude":
+            retval = edit_node_latitude(driver=driver, selected_node=selected_node)
+            if retval == EXIT_FAILURE:
+                print("Failed to edit latitude.")
+                return EXIT_FAILURE
+        case "Longitude":
+            retval = edit_node_longitude(driver=driver, selected_node=selected_node)
+            if retval == EXIT_FAILURE:
+                print("Failed to edit longitude.")
+                return EXIT_FAILURE
+        case "Light":
+            retval = edit_node_light(driver=driver, selected_node=selected_node)
+            if retval == EXIT_FAILURE:
+                print("Failed to edit light.")
+                return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_relation_name(*, driver, node1, node2):
+    edit_relation_name_cypher = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) SET r.name = '{}'"
+    new_name = input("Enter new name: ")
+    retval = query_void(
+        driver=driver,
+        the_cypher=edit_relation_name_cypher.format(node1, node2, new_name),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit relation name.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_relation_distance(*, driver, node1, node2):
+    edit_relation_distance_cypher = (
+        "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) "
+        "SET r.distance = {}"
+    )
+    new_distance = input("Enter new distance: ")
+    retval = query_void(
+        driver=driver,
+        the_cypher=edit_relation_distance_cypher.format(node1, node2, new_distance),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to edit relation distance.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def edit_relation_properties(*, driver, selected_node):
+    related_nodes_cypher = (
+        "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place) RETURN DISTINCT m"
+    )
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=related_nodes_cypher.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    related_nodes = [i.data()["m"]["name"] for i in records]
+    selected_related_node = get_choice(
+        msg="Please enter related node to edit: ", choice_data=related_nodes
+    )
+
+    relation_detail_cypher = (
+        "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) "
+        "RETURN r.name, r.distance"
+    )
+    retval, records, summary, keys = query(
+        driver=driver,
+        the_cypher=relation_detail_cypher.format(selected_node, selected_related_node),
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    relation = records[0].data()
+    print(relation)
+    print("Current properties")
+    print(f"Name    : {relation['r.name']}")
+    print(f"Distance: {relation['r.distance']}")
+    print("-" * 79)
+
+    selected_property = get_choice(
+        msg="Please enter property to edit: ", choice_data=["Name", "Distance"]
+    )
+    match selected_property:
+        case "Name":
+            retval = edit_relation_name(
+                driver=driver, node1=selected_node, node2=selected_related_node
+            )
+            if retval == EXIT_FAILURE:
+                print("Failed to edit relation name.")
+                return EXIT_FAILURE
+        case "Distance":
+            print("Edit distance")
+    return EXIT_SUCCESS
+
+
+def relation_properties_menu(*, driver, selected_node):
+    selected_action = get_choice(
+        msg="Please enter action: ", choice_data=["Add", "Edit", "Delete"]
+    )
+
+    match selected_action:
+        case "Add":
+            print("Add relation")
+        case "Edit":
+            edit_relation_properties(driver=driver, selected_node=selected_node)
+        case "Delete":
+            print("Delete relation")
+
+
+def edit_properties(*, driver):
+    selected_place = select_place(
+        title="Select place to edit properties", driver=driver
+    )
+
+    print(f"Edit properties of {selected_place}")
+    selected_edit = get_choice(
+        msg="Please enter edit: ", choice_data=["Node", "Relation", "Exit"]
+    )
+    match selected_edit:
+        case "Node":
+            edit_node_properties(driver=driver, selected_node=selected_place)
+        case "Relation":
+            relation_properties_menu(driver=driver, selected_node=selected_place)
+        case "Exit":
+            return EXIT_SUCCESS
     return EXIT_SUCCESS
 
 
@@ -524,9 +740,9 @@ def main():
                 print("Main Menu")
                 choice = get_choice(
                     choice_data=[
-                        "Show all places",
                         "Add Node (Road)",
                         "Add Node (Intersect)",
+                        "Edit Properties",
                         "Delete Node",
                         "Exit",
                     ]
@@ -543,6 +759,12 @@ def main():
                         retval = add_intersect(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to add intersect.")
+                            return EXIT_FAILURE
+
+                    case "Edit Properties":
+                        retval = edit_properties(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to edit properties.")
                             return EXIT_FAILURE
 
                     case "Delete Node":
