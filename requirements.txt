@@ -1,0 +1,8 @@
+black==24.3.0
+click==8.1.7
+mypy-extensions==1.0.0
+neo4j==5.18.0
+packaging==24.0
+pathspec==0.12.1
+platformdirs==4.2.0
+pytz==2024.1
