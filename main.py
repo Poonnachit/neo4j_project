@@ -382,8 +382,27 @@ def add_intersect(*, driver):
         print("Start place and end place must be different.")
         return EXIT_FAILURE
     road_name_from_end = road_name_input()
-    road_distance_from_end = road_distance_input()
+    # road_distance_from_end = road_distance_input()
+    relation_data = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) return r.distance"
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=relation_data.format(start_node, end_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
 
+    if records:
+        road_distance_from_end = records[0].data()["r.distance"] - int(
+            road_distance_from_start
+        )
+        if road_distance_from_end < 0:
+            print(
+                f"Old distance from start to end is {records[0].data()['r.distance']}"
+            )
+            print(f"New distance from start to end is {road_distance_from_end}")
+            print(f"New distance from start to end must be greater than 0.")
+            return EXIT_FAILURE
+    else:
+        road_distance_from_end = road_distance_input()
     delete_old_relation = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) DELETE r"
     retval = query_void(
         driver=driver, the_cypher=delete_old_relation.format(start_node, end_node)
@@ -985,35 +1004,29 @@ def main():
                         retval = get_shortest_path_by_distance(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to get shortest path by distance.")
-                            return EXIT_FAILURE
                     case "Get the shortest path by node":
                         retval = get_shortest_path_by_node(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to get shortest path by node.")
-                            return EXIT_FAILURE
 
                     case "Add Node (Road)":
                         retval = add_road(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to add road.")
-                            return EXIT_FAILURE
                     case "Add Node (Intersect)":
                         retval = add_intersect(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to add intersect.")
-                            return EXIT_FAILURE
 
                     case "Edit Properties":
                         retval = edit_properties(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to edit properties.")
-                            return EXIT_FAILURE
 
                     case "Delete Node":
                         retval = delete_node(driver=driver)
                         if retval == EXIT_FAILURE:
                             print("Failed to delete node.")
-                            return EXIT_FAILURE
                     case "Exit":
                         return EXIT_SUCCESS
 
