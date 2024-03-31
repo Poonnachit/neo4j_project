@@ -683,6 +683,102 @@ def edit_relation_properties(*, driver, selected_node):
     return EXIT_SUCCESS
 
 
+def add_relation(*, driver, selected_node):
+    not_related_nodes_cypher = (
+        "MATCH (n:Place)"
+        "WHERE NOT (n)-[:CONNECTS_TO]-(:Place {{name: '{}'}})"
+        "RETURN n.name"
+    )
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=not_related_nodes_cypher.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    not_related_nodes = [
+        record.data()["n.name"]
+        for record in records
+        if record.data()["n.name"] != selected_node
+    ]
+
+    if len(not_related_nodes) == 0:
+        print("No node that not related to this node")
+        return EXIT_SUCCESS
+
+    selected_related_node = get_choice(
+        msg="Please enter what your want to connect with: ",
+        choice_data=not_related_nodes,
+    )
+
+    road_name = road_name_input()
+    road_distance = road_distance_input()
+
+    create_relation_cypher = (
+        "MATCH (n:Place {{name: '{}'}}), (m:Place {{name: '{}'}})"
+        "CREATE (n)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(m),"
+        "(m)-[:CONNECTS_TO {{name: '{}', distance: {}}}]->(n)"
+    )
+
+    retval = query_void(
+        driver=driver,
+        the_cypher=create_relation_cypher.format(
+            selected_node,
+            selected_related_node,
+            road_name,
+            road_distance,
+            road_name,
+            road_distance,
+        ),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to create relation.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
+def delete_relation(*, driver, selected_node):
+    related_nodes_cypher = (
+        "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place) RETURN DISTINCT m"
+    )
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=related_nodes_cypher.format(selected_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    related_nodes = [i.data()["m"]["name"] for i in records]
+    selected_related_node = get_choice(
+        msg="Please enter related node to delete: ", choice_data=related_nodes
+    )
+
+    while True:
+        confirm = input("Are you sure to delete this relation? (Yes/No): ")
+        if confirm == "":
+            print("Confirm cannot be empty.")
+            continue
+        if confirm not in ["Yes", "No", "yes", "no", "y", "n"]:
+            print("Confirm must be 'Yes' or 'No'.")
+            continue
+        if confirm == "Yes" or confirm == "yes" or confirm == "y":
+            confirm = True
+        else:
+            confirm = False
+        break
+
+    if not confirm:
+        return EXIT_SUCCESS
+
+    delete_relation_cypher = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) DELETE r"
+    retval = query_void(
+        driver=driver,
+        the_cypher=delete_relation_cypher.format(selected_node, selected_related_node),
+    )
+    if retval == EXIT_FAILURE:
+        print("Failed to delete relation.")
+        return EXIT_FAILURE
+    return EXIT_SUCCESS
+
+
 def relation_properties_menu(*, driver, selected_node):
     selected_action = get_choice(
         msg="Please enter action: ", choice_data=["Add", "Edit", "Delete"]
@@ -690,11 +786,11 @@ def relation_properties_menu(*, driver, selected_node):
 
     match selected_action:
         case "Add":
-            print("Add relation")
+            add_relation(driver=driver, selected_node=selected_node)
         case "Edit":
             edit_relation_properties(driver=driver, selected_node=selected_node)
         case "Delete":
-            print("Delete relation")
+            delete_relation(driver=driver, selected_node=selected_node)
 
 
 def edit_properties(*, driver):
@@ -714,6 +810,141 @@ def edit_properties(*, driver):
         case "Exit":
             return EXIT_SUCCESS
     return EXIT_SUCCESS
+
+
+def print_shortest_path(*, lst, driver):
+    # lst = [("A", "B"), ("B", "C"), ("C", "D")]
+    for i in range(len(lst)):
+        if i == 0:
+            print(f"Shortest path from {lst[i][0]} to {lst[-1][1]}")
+            print(f"Start at {lst[i][0]}")
+
+        node_data = "MATCH (n:Place {{name: '{}'}}), (m:Place {{name:'{}'}}) RETURN n,m"
+        retval, records, summary, keys = query(
+            driver=driver, the_cypher=node_data.format(lst[i][0], lst[i][1])
+        )
+        if retval == EXIT_FAILURE:
+            return EXIT_FAILURE
+
+        result = records[0].data()
+        n, m = result["n"], result["m"]
+        vector = [(n["longitude"], n["latitude"]), (m["longitude"], m["latitude"])]
+        direction = get_compass_direction(vector=vector)
+
+        relation_data = "MATCH (n:Place {{name: '{}'}})-[r:CONNECTS_TO]-(m:Place {{name: '{}'}}) RETURN r.name, r.distance"
+        retval, records, summary, keys = query(
+            driver=driver, the_cypher=relation_data.format(lst[i][0], lst[i][1])
+        )
+        if retval == EXIT_FAILURE:
+            return EXIT_FAILURE
+
+        relation = records[0].data()
+        print(f"Head {direction}")
+        print(
+            f"then go to {lst[i][1]} on {relation['r.name']} ({relation['r.distance']} km)",
+            end=" ",
+        )
+        if m["light"]:
+            print("stop at traffic light")
+        else:
+            print("no traffic light")
+        if i == len(lst) - 1:
+            print(f"and you have arrived at at your destination {lst[i][1]}")
+
+
+def get_shortest_path_by_distance(*, driver):
+    start_node = select_place(title="Select start node", driver=driver)
+    end_node = select_place(title="Select end node", driver=driver)
+    if start_node == end_node:
+        print("Start place and end place must be different.")
+        return EXIT_FAILURE
+
+    drop_graph = "CALL gds.graph.drop('myGraph', false) YIELD graphName;"
+    retval = query_void(driver=driver, the_cypher=drop_graph)
+    if retval == EXIT_FAILURE:
+        print("Failed to drop graph.")
+        return EXIT_FAILURE
+
+    create_graph = """\
+    CALL gds.graph.project(
+        'myGraph',
+        'Place',
+        {CONNECTS_TO: {orientation: 'UNDIRECTED'}},
+        {
+            relationshipProperties: 'distance'
+        }
+    );
+    """
+
+    retval = query_void(driver=driver, the_cypher=create_graph)
+    if retval == EXIT_FAILURE:
+        print("Failed to create graph.")
+        return EXIT_FAILURE
+
+    dijkstra_cypher = """
+    MATCH (source:Place {{name: '{}'}}), (target:Place {{name: '{}'}})
+    CALL gds.shortestPath.dijkstra.stream('myGraph', {{
+        sourceNode: source,
+        targetNode: target,
+        relationshipWeightProperty: 'distance'
+    }})
+    YIELD index, sourceNode, targetNode, totalCost, nodeIds, costs, path
+    RETURN
+        index,
+        gds.util.asNode(sourceNode).name AS sourceNodeName,
+        gds.util.asNode(targetNode).name AS targetNodeName,
+        totalCost,
+        [nodeId IN nodeIds | gds.util.asNode(nodeId).name] AS nodeNames,
+        costs,
+        nodes(path) as path
+    ORDER BY index;
+    """
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=dijkstra_cypher.format(start_node, end_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    for record in records:
+        data = record.data()["path"]
+        name_lst = [i["name"] for i in data]
+
+        bob = list(zip(name_lst, name_lst[1:]))
+        print_shortest_path(driver=driver, lst=bob)
+
+
+def get_shortest_path_by_node(*, driver):
+    start_node = select_place(title="Select start node", driver=driver)
+    end_node = select_place(title="Select end node", driver=driver)
+    if start_node == end_node:
+        print("Start place and end place must be different.")
+        return EXIT_FAILURE
+
+    cypher = """
+    MATCH
+      (start:Place {{name: '{}'}}),
+      (end:Place {{name: '{}'}}),
+      p = shortestPath((start)-[*]-(end))
+    WHERE length(p) > 1
+    RETURN p
+    """
+    retval, records, summary, keys = query(
+        driver=driver, the_cypher=cypher.format(start_node, end_node)
+    )
+    if retval == EXIT_FAILURE:
+        return EXIT_FAILURE
+
+    for record in records:
+        path = record.data()["p"]
+        print("Shortest path:")
+
+        node_names = []
+        for i in range(len(path)):
+            print(path[i])
+            if i % 2 == 0:
+                node_names.append(path[i]["name"])
+        bob = list(zip(node_names, node_names[1:]))
+        print_shortest_path(driver=driver, lst=bob)
 
 
 def main():
@@ -740,6 +971,8 @@ def main():
                 print("Main Menu")
                 choice = get_choice(
                     choice_data=[
+                        "Get the shortest path by distance",
+                        "Get the shortest path by node",
                         "Add Node (Road)",
                         "Add Node (Intersect)",
                         "Edit Properties",
@@ -748,8 +981,17 @@ def main():
                     ]
                 )
                 match choice:
-                    case "Show all places":
-                        select_place(driver=driver)
+                    case "Get the shortest path by distance":
+                        retval = get_shortest_path_by_distance(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to get shortest path by distance.")
+                            return EXIT_FAILURE
+                    case "Get the shortest path by node":
+                        retval = get_shortest_path_by_node(driver=driver)
+                        if retval == EXIT_FAILURE:
+                            print("Failed to get shortest path by node.")
+                            return EXIT_FAILURE
+
                     case "Add Node (Road)":
                         retval = add_road(driver=driver)
                         if retval == EXIT_FAILURE:
