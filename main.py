@@ -1,6 +1,29 @@
 #! /usr/bin/env python3
 """
 64160038 Poonnachit Amnuaypornpaisal
+
+Project:    Bangsean Map
+
+Details:
+This project is about creating a map of Bangsean city. The map consists of nodes and relations.
+The nodes are the places in Bangsean city and the relations are the roads that connect the nodes.
+The program allows users to add, edit, delete nodes and relations. Users can also find the shortest path
+between two nodes by distance and by node. The program is implemented using python3 and neo4j.
+
+This program can handle more than 2 intersects when delete node by create new relation between related nodes
+
+How I handle more than 2 intersects when delete node:
+
+if related node already have relation with other related node
+    this program will not create new relation because it already has relation
+else
+    create new relation between related nodes by calculate total distance between 2 related nodes
+
+Problem:
+    when create new relation between related nodes, the program don't know the name of the road,s
+    it will automatically set the name of the road to the name of the start node to the end node,
+    but you can enter the name of the road manually
+
 """
 import neo4j
 import math
@@ -183,7 +206,7 @@ def select_place(*, driver, title="Select place"):
     if retval == EXIT_FAILURE:
         return EXIT_FAILURE
 
-    per_page = 3
+    per_page = 10
     skip = 0
     total_place = records[0].data()["count(n)"]
 
@@ -859,10 +882,16 @@ def print_shortest_path(*, lst, driver):
 
         relation = records[0].data()
         print(f"Head {direction}")
-        print(
-            f"then go to {lst[i][1]} on {relation['r.name']} ({relation['r.distance']} km)",
-            end=" ",
-        )
+        if relation["r.distance"] < 1:
+            print(
+                f"then go to {lst[i][1]} on {relation['r.name']} ({relation['r.distance']*1000} m)",
+                end=" ",
+            )
+        else:
+            print(
+                f"then go to {lst[i][1]} on {relation['r.name']} ({relation['r.distance']} km)",
+                end=" ",
+            )
         if m["light"]:
             print("stop at traffic light")
         else:
